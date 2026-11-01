@@ -65,3 +65,12 @@ test("missing or expired reset timestamps have honest fallback text", () => {
     );
     assert.match(text(render({ five_hour_reset_at: "2020-01-01T00:00:00Z" })), /Resetting…/);
 });
+
+test("shows banked reset totals only when the provider supports them", () => {
+    assert.match(text(render({ total_reset_credits_available: 13 })), /Available limit resets: 13/);
+    assert.match(text(render({ total_reset_credits_available: 0 })), /Available limit resets: 0/);
+    assert.doesNotMatch(
+        text(render({ total_reset_credits_available: null })),
+        /Available limit resets/,
+    );
+});

@@ -46,13 +46,23 @@ export function UsageLimitsCard({ stats }: { stats: OverviewStats }) {
                     </div>
                 ))}
             </dl>
-            <p className="border-ink-700 text-fog-400 border-t px-5 py-3 text-xs @min-[640px]:px-6">
-                Quota averages across{" "}
-                <span className="text-fog-100 font-mono tabular-nums">
-                    {formatNumber(stats.active_accounts)} / {formatNumber(stats.total_accounts)}
-                </span>{" "}
-                authenticated and enabled accounts
-            </p>
+            <div className="border-ink-700 text-fog-400 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t px-5 py-3 text-xs @min-[640px]:px-6">
+                <p>
+                    Quota averages across{" "}
+                    <span className="text-fog-100 font-mono tabular-nums">
+                        {formatNumber(stats.active_accounts)} / {formatNumber(stats.total_accounts)}
+                    </span>{" "}
+                    authenticated and enabled accounts
+                </p>
+                {stats.total_reset_credits_available != null ? (
+                    <p>
+                        Available limit resets:{" "}
+                        <span className="text-fog-100 font-mono tabular-nums">
+                            {formatNumber(stats.total_reset_credits_available)}
+                        </span>
+                    </p>
+                ) : null}
+            </div>
         </Card>
     );
 }

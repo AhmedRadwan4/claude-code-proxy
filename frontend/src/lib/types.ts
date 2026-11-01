@@ -37,6 +37,7 @@ export interface OverviewStats {
     total_accounts: number;
     active_accounts: number;
     usable_accounts: number;
+    total_reset_credits_available: number | null;
     five_hour_average_pct: number;
     weekly_average_pct: number;
     five_hour_reset_at: string | null;

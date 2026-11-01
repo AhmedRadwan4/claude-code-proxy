@@ -47,6 +47,13 @@ other exhausted windows and cooldowns must expire by that reset time. Unknown
 or later blocking resets are skipped, and simultaneous resets are supported.
 These dashboard calculations do not change inference routing or consume resets.
 
+Fresh successful quota probes also release an old quota cooldown when the
+recorded quota-failure deadline matches and every observed window is usable.
+Short backoffs, unrelated transient failures, missing probe data, and real quota
+exhaustion do not clear a cooldown. The Usage & limits footer reports the total
+banked limit-reset credits for enabled authenticated accounts when the provider
+supports them (Codex); unsupported providers do not display a fictitious zero.
+
 Both Events pages request server-built, filtered parent groups and request
 summaries. Lifecycle events load in chronological order when a request expands
 and are cached until the next page refresh. Filters apply to matching requests
