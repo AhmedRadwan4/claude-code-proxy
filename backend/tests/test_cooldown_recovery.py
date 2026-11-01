@@ -105,6 +105,7 @@ def test_quota_probe_does_not_overwrite_concurrent_account_changes(seed_account,
             )
         )
         db.commit()
+        db.refresh(account)  # Keep a genuinely stale ORM snapshot in this session.
         # Another transaction modifies the row after our probe loaded it.
         with SessionFactory() as other:
             row = other.get(AccountDb, account_id)
