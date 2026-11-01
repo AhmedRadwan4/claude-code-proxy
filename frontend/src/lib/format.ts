@@ -63,6 +63,7 @@ export function formatCostUsd(value: number): string {
 export function tierLabel(raw: string | null): string {
     if (!raw) return "Unknown";
     const r = raw.toLowerCase();
+    if (r.includes("ultra")) return "Ultra";
     if (r.includes("max_20") || r.includes("max20")) return "Max 20×";
     if (r.includes("max_5") || r.includes("max5")) return "Max 5×";
     if (r.includes("max")) return "Max";

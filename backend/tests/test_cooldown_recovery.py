@@ -14,6 +14,7 @@ from app.utils.postgres.base import SessionFactory
     "scenario,recovers",
     [
         ("quota", True),
+        ("no_five_hour_window", True),
         ("recent_quota", False),
         ("still_exhausted", False),
         ("partial_probe", False),
@@ -59,6 +60,8 @@ def test_fresh_quota_probe_only_clears_matching_stale_quota_cooldown(seed_accoun
         }
         if scenario == "partial_probe":
             fresh.pop("seven_day")
+        if scenario == "no_five_hour_window":
+            fresh["five_hour"] = None
         if scenario == "invalid_probe":
             fresh["five_hour"]["utilization"] = -1
         rotation.apply_usage_probe(account, fresh)

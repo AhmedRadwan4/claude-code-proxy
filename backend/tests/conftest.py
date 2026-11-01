@@ -37,6 +37,8 @@ os.environ.update(
         # avoid synthetic requests consuming provider quota during incidents.
         "WARMUP_ENABLED": "true",
         "FALLBACK_GENERATION_CANARY_ENABLED": "false",
+        # Model sync is exercised directly; the startup loop must not call Anthropic with seeded fake tokens.
+        "MODEL_SYNC_ENABLED": "false",
     }
 )
 

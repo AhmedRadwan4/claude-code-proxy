@@ -1,8 +1,8 @@
 import pytest
 
-from app import pricing
+from app import model_catalog, pricing
 from app.config import get_settings
-from app.model_catalog import DEFAULT_MODEL_IDS, configured_model_ids
+from app.model_catalog import DEFAULT_MODEL_IDS, configured_model_ids, normalize_synced_ids
 
 
 def test_model_allowlist_reads_comma_separated_environment(monkeypatch):
@@ -20,6 +20,45 @@ def test_blank_model_allowlist_keeps_safe_defaults():
 
 def test_latest_opus_is_in_default_catalog():
     assert "claude-opus-5-5" in DEFAULT_MODEL_IDS
+
+
+def test_synced_ids_keep_claude_models_and_add_undated_aliases():
+    assert normalize_synced_ids([" Claude-Haiku-6-20270101 ", "claude-sonnet-5-5", "gpt-5"]) == (
+        "claude-haiku-6",
+        "claude-haiku-6-20270101",
+        "claude-sonnet-5-5",
+    )
+
+
+def test_synced_models_extend_allowlist_only_when_enabled(monkeypatch):
+    monkeypatch.setattr(model_catalog, "_synced_model_ids", ("claude-next-1",))
+    monkeypatch.setenv("ALLOWED_MODELS", "claude-custom")
+    for enabled, expected in (("true", ("claude-custom", "claude-next-1")), ("false", ("claude-custom",))):
+        monkeypatch.setenv("MODEL_SYNC_ENABLED", enabled)
+        get_settings.cache_clear()
+        try:
+            assert configured_model_ids() == expected
+        finally:
+            get_settings.cache_clear()
+
+
+def test_sync_reads_models_with_pooled_account_and_keeps_last_good_list(seed_account, monkeypatch):
+    from app.utils import oauth
+
+    tokens = []
+    monkeypatch.setattr(model_catalog, "_synced_model_ids", ())
+    monkeypatch.setattr(oauth, "fetch_model_ids", lambda token, **_: tokens.append(token) or ["claude-sonnet-6"])
+    seed_account()
+    model_catalog.sync_models()
+    assert tokens == ["upstream-access-token"]
+    assert model_catalog._synced_model_ids == ("claude-sonnet-6",)
+
+    def upstream_down(token, **_):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(oauth, "fetch_model_ids", upstream_down)
+    model_catalog.sync_models()
+    assert model_catalog._synced_model_ids == ("claude-sonnet-6",)
 
 
 @pytest.mark.parametrize(

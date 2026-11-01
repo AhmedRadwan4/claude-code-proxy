@@ -1,6 +1,7 @@
 # Path: app/main.py
 # Description: This file contains the main FastAPI application.
 
+import asyncio
 import os
 import time
 from contextlib import asynccontextmanager
@@ -10,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app import model_catalog
 from app.config import API_PREFIX, get_settings
 from app.logger import configure_logging, get_logger
 from app.routes import main_router
@@ -22,14 +24,23 @@ settings = get_settings()
 logger = get_logger()
 
 
+async def _sync_models_forever():
+    while True:
+        await asyncio.to_thread(model_catalog.sync_models)
+        await asyncio.sleep(model_catalog.MODEL_SYNC_INTERVAL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging()
     await archive.ensure_archive_ready()
+    model_sync = asyncio.create_task(_sync_models_forever()) if settings.MODEL_SYNC_ENABLED else None
     logger.info("Claude Code Proxy backend started")
     try:
         yield
     finally:
+        if model_sync:
+            model_sync.cancel()
         await archive.close_archive_store()
 
 

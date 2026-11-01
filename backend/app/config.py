@@ -88,6 +88,8 @@ class Settings(BaseSettings):
     WARMUP_MODEL: str = "claude-haiku-4-5"
     # Comma-separated local model allowlist. Blank keeps the built-in lineup.
     ALLOWED_MODELS: str = ""
+    # Add Claude models Anthropic newly lists (via a pooled account or cached fallback catalogs) to the allowlist hourly.
+    MODEL_SYNC_ENABLED: bool = True
 
     # Default proxy rate limit (requests/minute) for an API key with no explicit override; 0 disables limiting.
     DEFAULT_KEY_RATE_LIMIT_PER_MINUTE: int = 0

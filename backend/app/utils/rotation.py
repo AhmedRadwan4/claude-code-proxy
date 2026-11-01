@@ -318,6 +318,8 @@ def recover_confirmed_quota_cooldown(account: AccountDb, usage: Mapping) -> bool
         return False
     for key in ("five_hour", "seven_day"):
         bucket = usage.get(key)
+        if key == "five_hour" and key in usage and bucket is None:
+            continue  # Plans without a five-hour window (Ultra) report it as null.
         if not isinstance(bucket, Mapping) or not isinstance(bucket.get("utilization"), (int, float)) or not 0 <= bucket["utilization"] <= 1:
             return False
     if any(window.used_pct is not None and window.used_pct >= window.threshold for window in quota_windows(account)):
@@ -384,7 +386,12 @@ def apply_usage_probe(account: AccountDb, usage: Mapping[str, Optional[dict]]) -
     five_hour = usage.get("five_hour")
     seven_day = usage.get("seven_day")
 
-    if five_hour:
+    if five_hour is None and "five_hour" in usage:
+        # No five-hour window on this plan (Ultra). Drop stale values, e.g. the
+        # 100% a weekly hard-limit body writes, so they never block the account.
+        account.session_used_pct = None
+        account.session_reset_at = None
+    elif five_hour:
         if five_hour.get("utilization") is not None:
             account.session_used_pct = five_hour["utilization"]
         if five_hour.get("is_cold") is True:

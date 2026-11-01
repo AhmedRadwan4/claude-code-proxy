@@ -3,10 +3,11 @@
 
 import base64
 import hashlib
+import re
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import httpx
 
@@ -150,11 +151,19 @@ def extract_email(profile: Dict) -> Optional[str]:
 
 
 def extract_tier(profile: Dict) -> Optional[str]:
-    """Pull the raw subscription tier (e.g. "default_claude_max_5x") out of a profile blob."""
+    """Pull the raw subscription tier (e.g. "default_claude_max_5x") out of a profile blob.
+
+    Renamed plans keep their old ``rate_limit_tier`` (Ultra still reports
+    ``default_claude_max_20x``), so a ``plan_display_name`` wins when present:
+    "Ultra" -> "default_claude_ultra".
+    """
     if not isinstance(profile, dict):
         return None
     org = profile.get("organization")
     if isinstance(org, dict):
+        plan = org.get("plan_display_name")
+        if isinstance(plan, str) and plan.strip():
+            return "default_claude_" + re.sub(r"[^a-z0-9]+", "_", plan.strip().lower()).strip("_")
         return org.get("rate_limit_tier") or org.get("organization_type")
     return None
 
@@ -251,3 +260,16 @@ def fetch_usage(access_token: str, *, egress_target: egress.EgressTarget | None 
                 "seven_day": _normalize_bucket(data.get("seven_day")),
             }
     raise RuntimeError("unreachable")  # pragma: no cover -- the loop always returns or raises
+
+
+def fetch_model_ids(access_token: str, *, egress_target: egress.EgressTarget | None = None) -> List[str]:
+    """List the model ids Anthropic currently serves to this account."""
+    with egress.sync_client(egress_target, timeout=15.0) if egress_target else httpx.Client(timeout=15.0) as client:
+        resp = client.get(
+            f"{config.UPSTREAM_BASE_URL}/v1/models",
+            params={"limit": 1000},
+            headers=_bearer_headers(access_token),
+        )
+        resp.raise_for_status()
+        data = resp.json().get("data")
+        return [str(item["id"]) for item in data or [] if isinstance(item, dict) and item.get("id")]
