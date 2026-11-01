@@ -15,7 +15,7 @@ cp Resources/Info.plist "$app/Contents/Info.plist"
 executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")
 test "$executable" = "ClaudeMenuBar"
 test -x "$app/Contents/MacOS/$executable"
-lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/$executable"
+lipo "$app/Contents/MacOS/$executable" -verify_arch arm64 x86_64
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION:-0.0.0}" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${GITHUB_RUN_NUMBER:-1}" "$app/Contents/Info.plist"
 iconset="$staging/AppIcon.iconset"
