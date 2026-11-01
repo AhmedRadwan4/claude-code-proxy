@@ -117,11 +117,17 @@ export interface ProxyEvent {
     archive_hot?: boolean;
 }
 
+export interface EventGroup {
+    key: string;
+    requests: { request_id: string; summary: ProxyEvent; event_count: number }[];
+}
+
 export interface ProxyEventPage {
     total: number;
     limit: number;
     offset: number;
     events: ProxyEvent[];
+    groups: EventGroup[];
 }
 
 export interface ArchiveRequestDetail {

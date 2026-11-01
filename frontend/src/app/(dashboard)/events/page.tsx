@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState, useRef, type ReactNode } fro
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
-import { ProxyEvent, TimeRange, UserLookup } from "@/lib/types";
+import { EventGroup, ProxyEvent, TimeRange, UserLookup } from "@/lib/types";
 import { RangePicker } from "@/components/RangePicker";
 import { UserFilter } from "@/components/UserFilter";
 import { EventTypeFilter } from "@/components/EventTypeFilter";
@@ -116,19 +116,6 @@ function groupByLabel(groupBy: GroupBy): string {
     return "Individual requests";
 }
 
-function groupValue(event: ProxyEvent, groupBy: GroupBy): string {
-    if (groupBy === "request") return event.request_id;
-    const metadata = event.metadata as Record<string, unknown>;
-    const field =
-        groupBy === "agent_run"
-            ? "codex_root_turn_id"
-            : groupBy === "conversation"
-              ? "codex_thread_id"
-              : "codex_session_id";
-    const value = (event as unknown as Record<string, unknown>)[field] ?? metadata[field];
-    return typeof value === "string" && value.trim() ? value : `missing:${event.request_id}`;
-}
-
 function CacheReadMetric({ cached, input }: { cached: unknown; input: unknown }) {
     if (cached == null || input == null) return <>—</>;
     const cachedTokens = Number(cached);
@@ -198,6 +185,9 @@ export default function EventsPage() {
     const [eventType, setEventType] = useState("");
     const [model, setModel] = useState("");
     const [groupBy, setGroupBy] = useState<GroupBy>("request");
+    const [groups, setGroups] = useState<EventGroup[]>([]);
+    const [requestDetails, setRequestDetails] = useState<Record<string, ProxyEvent[]>>({});
+    const pendingDetails = useRef(new Set<string>());
     const [events, setEvents] = useState<ProxyEvent[]>([]);
     const [expandedRequests, setExpandedRequests] = useState<Set<string>>(new Set());
     const [total, setTotal] = useState(0);
@@ -232,6 +222,9 @@ export default function EventsPage() {
                 .then((page) => {
                     if (requestId !== eventRequestId.current) return;
                     setEvents(page.events);
+                    setGroups(page.groups);
+                    setRequestDetails({});
+                    setExpandedRequests(new Set());
                     setTotal(page.total);
                 })
                 .catch((e) => {
@@ -244,13 +237,49 @@ export default function EventsPage() {
         },
         [eventType, groupBy, model, offset, pageSize, range.end, range.start, userId],
     );
-    const toggleRequest = (requestId: string) => {
-        setExpandedRequests((current) => {
-            const next = new Set(current);
-            if (next.has(requestId)) next.delete(requestId);
-            else next.add(requestId);
-            return next;
-        });
+    const toggleRequest = async (requestId: string) => {
+        if (expandedRequests.has(requestId)) {
+            setExpandedRequests((current) => {
+                const next = new Set(current);
+                next.delete(requestId);
+                return next;
+            });
+            return;
+        }
+        if (pendingDetails.current.has(requestId)) return;
+        const generation = eventRequestId.current;
+        let details = requestDetails[requestId];
+        if (!details) {
+            pendingDetails.current.add(requestId);
+            try {
+                // Page through even unusually long retry histories without truncation.
+                details = [];
+                let nextOffset = 0;
+                while (true) {
+                    const page = await api.events(
+                        500,
+                        nextOffset,
+                        undefined,
+                        undefined,
+                        undefined,
+                        undefined,
+                        requestId,
+                    );
+                    details.push(...page.events);
+                    nextOffset += page.events.length;
+                    if (nextOffset >= page.total || !page.events.length) break;
+                }
+                if (generation !== eventRequestId.current) return;
+                setRequestDetails((current) => ({ ...current, [requestId]: details! }));
+            } catch (e) {
+                setError(e instanceof Error ? e.message : "Unable to load request events.");
+                return;
+            } finally {
+                pendingDetails.current.delete(requestId);
+            }
+        }
+        if (generation === eventRequestId.current)
+            setExpandedRequests((current) => new Set(current).add(requestId));
     };
     const updateUrl = useCallback(
         (updates: Record<string, string | null | undefined>) => {
@@ -518,74 +547,37 @@ export default function EventsPage() {
                             </thead>
                             <tbody>
                                 {(() => {
-                                    const groups = new Map<string, ProxyEvent[]>();
-                                    events.forEach((event) => {
-                                        const key = groupValue(event, groupBy);
-                                        const existing = groups.get(key);
-                                        if (existing) existing.push(event);
-                                        else groups.set(key, [event]);
-                                    });
                                     const rows: ReactNode[] = [];
-                                    groups.forEach((topEvents, topKey) => {
-                                        if (true) {
-                                            if (groupBy !== "request") {
-                                                rows.push(
-                                                    <tr
-                                                        key={`group-${topKey}`}
-                                                        className="bg-ink-850 border-ink-700 border-b"
-                                                    >
-                                                        <td
-                                                            colSpan={14}
-                                                            className="px-3 py-2 text-xs"
-                                                        >
-                                                            <span className="text-fog-200 font-medium">
-                                                                {groupByLabel(groupBy)}
-                                                            </span>
-                                                            <span className="text-fog-500 mx-2">
-                                                                ·
-                                                            </span>
-                                                            <span className="text-brand-300 font-mono">
-                                                                {topKey}
-                                                            </span>
-                                                            <span className="text-fog-500 ml-2">
-                                                                ·{" "}
-                                                                {
-                                                                    new Set(
-                                                                        topEvents.map(
-                                                                            (event) =>
-                                                                                event.request_id,
-                                                                        ),
-                                                                    ).size
-                                                                }{" "}
-                                                                requests
-                                                            </span>
-                                                        </td>
-                                                    </tr>,
-                                                );
-                                            }
-                                            const requestGroups = new Map<string, ProxyEvent[]>();
-                                            topEvents.forEach((event) => {
-                                                const existing = requestGroups.get(
-                                                    event.request_id,
-                                                );
-                                                if (existing) existing.push(event);
-                                                else requestGroups.set(event.request_id, [event]);
-                                            });
-                                            requestGroups.forEach((groupEvents, key) => {
+                                    groups.forEach(({ requests, key: topKey }) => {
+                                        if (groupBy !== "request") {
+                                            rows.push(
+                                                <tr
+                                                    key={`group-${topKey}`}
+                                                    className="bg-ink-850 border-ink-700 border-b"
+                                                >
+                                                    <td colSpan={14} className="px-3 py-2 text-xs">
+                                                        <span className="text-fog-200 font-medium">
+                                                            {groupByLabel(groupBy)}
+                                                        </span>
+                                                        <span className="text-fog-500 mx-2">·</span>
+                                                        <span className="text-brand-300 font-mono">
+                                                            {topKey}
+                                                        </span>
+                                                        <span className="text-fog-500 ml-2">
+                                                            · {requests.length} requests
+                                                        </span>
+                                                    </td>
+                                                </tr>,
+                                            );
+                                        }
+                                        requests.forEach(
+                                            ({
+                                                request_id: key,
+                                                summary,
+                                                event_count: eventCount,
+                                            }) => {
                                                 const expanded = expandedRequests.has(key);
-                                                const allEvents = [...groupEvents].sort(
-                                                    (a, b) =>
-                                                        a.created_at.localeCompare(b.created_at) ||
-                                                        a.id.localeCompare(b.id),
-                                                );
-                                                const summary =
-                                                    [...allEvents]
-                                                        .reverse()
-                                                        .find(
-                                                            (event) =>
-                                                                event.event_type ===
-                                                                "response.returned",
-                                                        ) ?? allEvents[allEvents.length - 1];
+                                                const allEvents = requestDetails[key] ?? [summary];
                                                 const visibleEvents = [
                                                     { event: summary, summary: true },
                                                     ...(expanded
@@ -641,7 +633,7 @@ export default function EventsPage() {
                                                                             )}
                                                                             {expanded
                                                                                 ? "Hide events"
-                                                                                : `Show events (${allEvents.length})`}
+                                                                                : `Show events (${eventCount})`}
                                                                         </button>
                                                                     ) : null}
                                                                 </td>
@@ -776,85 +768,6 @@ export default function EventsPage() {
                                                             </tr>,
                                                         );
                                                     },
-                                                );
-                                            });
-                                            return;
-                                        }
-                                        const groupEvents = topEvents;
-                                        const key = topKey;
-                                        const expanded = expandedRequests.has(key);
-                                        const allEvents = [...groupEvents].sort(
-                                            (a, b) =>
-                                                a.created_at.localeCompare(b.created_at) ||
-                                                a.id.localeCompare(b.id),
-                                        );
-                                        const summary =
-                                            [...allEvents]
-                                                .reverse()
-                                                .find(
-                                                    (event) =>
-                                                        event.event_type === "response.returned",
-                                                ) ?? allEvents[allEvents.length - 1];
-                                        const visibleEvents = [
-                                            { event: summary, summary: true },
-                                            ...(expanded
-                                                ? allEvents.map((event) => ({
-                                                      event,
-                                                      summary: false,
-                                                  }))
-                                                : []),
-                                        ];
-                                        visibleEvents.forEach(
-                                            ({ event: e, summary: isSummary }) => {
-                                                const m = e.metadata as Record<string, unknown>;
-                                                rows.push(
-                                                    <tr
-                                                        key={isSummary ? `request-${key}` : e.id}
-                                                        className={`border-ink-800 border-b align-top ${isSummary ? requestTone(allEvents) : rowTone(e.event_type)}`}
-                                                    >
-                                                        <td className="text-fog-400 w-44 min-w-44 py-3 pr-3 pl-3 font-mono text-xs whitespace-nowrap">
-                                                            <span className="block">
-                                                                {formatDateTime(e.created_at)}
-                                                            </span>
-                                                            {isSummary ? (
-                                                                <button
-                                                                    type="button"
-                                                                    aria-expanded={expanded}
-                                                                    onClick={() =>
-                                                                        toggleRequest(key)
-                                                                    }
-                                                                    className="border-brand-400/40 bg-brand-500/10 text-brand-200 mt-2 inline-flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs font-semibold"
-                                                                >
-                                                                    {expanded ? (
-                                                                        <ChevronDown size={16} />
-                                                                    ) : (
-                                                                        <ChevronRight size={16} />
-                                                                    )}{" "}
-                                                                    {expanded
-                                                                        ? "Hide events"
-                                                                        : `Show events (${allEvents.length})`}
-                                                                </button>
-                                                            ) : null}
-                                                        </td>
-                                                        <td
-                                                            colSpan={13}
-                                                            className="text-fog-300 px-3 py-3 text-xs"
-                                                        >
-                                                            <span className="text-brand-300 font-mono">
-                                                                {key}
-                                                            </span>
-                                                            <span className="text-fog-500 ml-3">
-                                                                {displayUser(e, users)} ·{" "}
-                                                                {displayModel(m)} ·{" "}
-                                                                {String(
-                                                                    m.thinking_level ??
-                                                                        m.reasoning_level ??
-                                                                        "—",
-                                                                )}{" "}
-                                                                · {String(m.account_name ?? "—")}
-                                                            </span>
-                                                        </td>
-                                                    </tr>,
                                                 );
                                             },
                                         );
