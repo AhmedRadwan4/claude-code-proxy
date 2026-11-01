@@ -38,7 +38,7 @@ final class ProxyModelTests: XCTestCase {
         XCTAssertNotNil(data.weeklyResetAt)
     }
     func testNullResetIsUnknownNotZeroUsage() throws {
-        let raw = overviewJSON.replacingOccurrences("\"2026-11-04T12:00:00.123456Z\"", with: "null")
+        let raw = overviewJSON.replacingOccurrences(of: "\"2026-11-04T12:00:00.123456Z\"", with: "null")
         XCTAssertNil(try ProxyAPI.decoder().decode(ProxyOverview.self, from: Data(raw.utf8)).fiveHourResetAt)
     }
     func testURLNormalizationAndValidation() throws {
