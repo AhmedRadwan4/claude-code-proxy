@@ -1,4 +1,9 @@
-COMPOSE := docker compose -f docker-compose.yaml -f docker-compose.live.yml
+# Compose files come from COMPOSE_FILE (shell, then .env, then the default) so make and plain
+# `docker compose` always manage the same services. Leaving a file out (e.g. docker-compose.postgres.yml)
+# makes its containers look like orphans; deploy therefore never passes --remove-orphans.
+COMPOSE_FILE ?= $(or $(shell sed -n 's/^COMPOSE_FILE=//p' .env 2>/dev/null),docker-compose.yaml:docker-compose.live.yml)
+export COMPOSE_FILE
+COMPOSE := docker compose
 DEPLOY_WAIT_SECONDS ?= 180
 
 .PHONY: help backend-check frontend-check verify deploy deploy-blue-green deploy-frontend status logs
@@ -25,7 +30,7 @@ verify: backend-check frontend-check
 
 deploy:
 	$(COMPOSE) config --quiet
-	$(COMPOSE) up -d --build --remove-orphans --wait --wait-timeout $(DEPLOY_WAIT_SECONDS)
+	$(COMPOSE) up -d --build --wait --wait-timeout $(DEPLOY_WAIT_SECONDS)
 
 deploy-blue-green:
 	./scripts/blue-green.sh deploy
