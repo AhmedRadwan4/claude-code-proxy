@@ -14,6 +14,7 @@ from app.utils.postgres.base import SessionFactory
     "scenario,recovers",
     [
         ("quota", True),
+        ("recent_quota", False),
         ("still_exhausted", False),
         ("partial_probe", False),
         ("transient", False),
@@ -29,6 +30,8 @@ from app.utils.postgres.base import SessionFactory
 def test_fresh_quota_probe_only_clears_matching_stale_quota_cooldown(seed_account, scenario, recovers):
     account_id = seed_account("parked", session_used_pct=1.0, weekly_used_pct=1.0)
     now = datetime.now(timezone.utc)
+    if scenario != "recent_quota":
+        now -= timedelta(minutes=2)
     duration = 60 if scenario == "short_backoff" else 300000
     with SessionFactory() as db:
         account = db.get(AccountDb, account_id)
@@ -79,3 +82,43 @@ def test_overview_reset_credit_total_uses_enabled_authenticated_pool(client, adm
         db.commit()
     result = client.get("/api/v1/stats/overview", headers=admin_headers).json()
     assert result["total_reset_credits_available"] is None
+
+
+@pytest.mark.parametrize("change", ["disable", "deadline"])
+def test_quota_probe_does_not_overwrite_concurrent_account_changes(seed_account, change):
+    account_id = seed_account("concurrent")
+    created = datetime.now(timezone.utc) - timedelta(minutes=2)
+    deadline = created + timedelta(days=3)
+    with SessionFactory() as db:
+        account = db.get(AccountDb, account_id)
+        account.status = AccountStatus.COOLDOWN
+        account.cooldown_until = deadline
+        db.add(
+            ProxyEventDb(
+                id=uuid.uuid4(),
+                request_id="req_concurrent",
+                account_id=account_id,
+                event_type="account.rate_limited",
+                message="Cooling down for 259200s",
+                metadata_json=json.dumps({"failure_class": "account_quota"}),
+                created_at=created,
+            )
+        )
+        db.commit()
+        # Another transaction modifies the row after our probe loaded it.
+        with SessionFactory() as other:
+            row = other.get(AccountDb, account_id)
+            if change == "disable":
+                row.status = AccountStatus.DISABLED
+            else:
+                row.cooldown_until = deadline + timedelta(hours=1)
+            other.commit()
+        assert not rotation.recover_confirmed_quota_cooldown(
+            account, {"five_hour": {"utilization": 0}, "seven_day": {"utilization": 0}, "limit_reached": False}
+        )
+        db.commit()
+        db.refresh(account)
+        if change == "disable":
+            assert account.status == AccountStatus.DISABLED
+        else:
+            assert account.cooldown_until == deadline + timedelta(hours=1)

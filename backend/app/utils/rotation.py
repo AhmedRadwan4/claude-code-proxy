@@ -351,8 +351,27 @@ def recover_confirmed_quota_cooldown(account: AccountDb, usage: Mapping) -> bool
         created_at = created_at.replace(tzinfo=timezone.utc)
     if deadline.tzinfo is None:
         deadline = deadline.replace(tzinfo=timezone.utc)
+    # Do not contradict a just-issued provider rejection with a potentially
+    # stale usage endpoint response.
+    if created_at > datetime.now(timezone.utc) - timedelta(seconds=60):
+        return False
     expected = created_at + timedelta(seconds=int(match[1]))
     if abs((expected - deadline).total_seconds()) > 5:
+        return False
+    # The probe ran outside a row lock. Verify that nobody disabled the
+    # account or changed its cooldown while the provider request was in flight.
+    persisted = (
+        db.query(AccountDb.status, AccountDb.cooldown_until, AccountDb.provider_health)
+        .filter(AccountDb.id == account.id)
+        .with_for_update()
+        .one_or_none()
+    )
+    if persisted is None or persisted.status != AccountStatus.COOLDOWN or persisted.provider_health == ProviderHealth.REAUTH_REQUIRED:
+        return False
+    persisted_deadline = persisted.cooldown_until
+    if persisted_deadline is not None and persisted_deadline.tzinfo is None:
+        persisted_deadline = persisted_deadline.replace(tzinfo=timezone.utc)
+    if persisted_deadline != deadline:
         return False
     account.cooldown_until = None
     account.status = AccountStatus.ACTIVE

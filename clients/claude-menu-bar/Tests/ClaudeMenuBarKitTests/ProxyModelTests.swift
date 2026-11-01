@@ -121,4 +121,41 @@ final class ProxyModelTests: XCTestCase {
             try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: output).appendingPathComponent("overview.png"))
         }
     }
+    @MainActor func testSignInPersistsConnectionAndLoadsActualOverview() async throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = MemoryCredentials(); store.values = [:]
+        StubProtocol.handler = { request in
+            if request.url!.path.hasSuffix("auth/login") { return (200, "{\"token\":\"signed-in\"}") }
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer signed-in")
+            return (200, overviewJSON)
+        }
+        let model = DashboardModel(credentials: store, defaults: defaults, session: session())
+        XCTAssertTrue(model.showingSettings)
+        await model.authenticate(baseURL: "https://proxy.test/api/v1/", username: " owner ", password: "password")
+        XCTAssertTrue(model.isConfigured); XCTAssertFalse(model.showingSettings)
+        XCTAssertEqual(model.username, "owner"); XCTAssertEqual(model.baseURL, "https://proxy.test/")
+        XCTAssertEqual(store.read("password"), "password"); XCTAssertEqual(model.overview?.totalAccounts, 26)
+        XCTAssertNil(defaults.string(forKey: "password"))
+    }
+    @MainActor func testFailedRefreshPreservesLastSuccessfulDataAndTimestamp() async throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        defaults.set("https://proxy.test", forKey: "proxy.baseURL")
+        let model = DashboardModel(credentials: MemoryCredentials(), defaults: defaults, session: session())
+        StubProtocol.handler = { _ in (200, overviewJSON) }
+        await model.refresh()
+        let previous = model.overview, updated = model.lastUpdated
+        StubProtocol.handler = { _ in (503, "{\"detail\":\"Temporarily unavailable\"}") }
+        await model.refresh()
+        XCTAssertEqual(model.overview, previous); XCTAssertEqual(model.lastUpdated, updated)
+        XCTAssertTrue(model.error?.contains("503") == true); XCTAssertFalse(model.isRefreshing)
+    }
+    @MainActor func testInvalidConnectionDoesNotPersistCredentials() async throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = MemoryCredentials(); store.values = [:]
+        let model = DashboardModel(credentials: store, defaults: defaults, session: session())
+        await model.authenticate(baseURL: "file:///etc", username: "owner", password: "password")
+        XCTAssertFalse(model.isConfigured); XCTAssertNotNil(model.settingsError)
+        XCTAssertTrue(store.values.isEmpty)
+    }
+
 }
