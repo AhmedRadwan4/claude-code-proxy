@@ -29,6 +29,40 @@ The full-width **Request analytics** panel defaults to TPS and also includes req
 
 The home page fetches analytics through one read-only `/api/v1/stats/dashboard` response. Independent calculations use a bounded worker pool with separate database sessions; the hidden legacy usage table no longer fetches data. Events combine lookup lists in one request and count paginated parent groups in the grouped selection query. These changes do not alter inference or account routing.
 
+## Shared dashboard behavior
+
+Both proxies use the same **Usage & limits** card: Input rate, Cache hit rate,
+Average 5-hour limit, and Average weekly limit. The account-count line remains
+plain text: “Quota averages across X / Y authenticated and enabled accounts.”
+The standalone Requests by model and Per-request token distribution cards are
+removed; requests by model over time remains available in Request analytics.
+The dashboard bundle no longer computes the removed distribution panel.
+There are no progress bars, pills, remaining percentages, or token-total captions
+in this card. Four columns become a two-by-two layout when the card is narrow.
+
+Weekly-exhausted accounts contribute 100% used to the five-hour average; they
+are not removed from its denominator. Reset countdowns show the earliest future
+reset that replenishes a nonempty quota window and leaves the account usable:
+other exhausted windows and cooldowns must expire by that reset time. Unknown
+or later blocking resets are skipped, and simultaneous resets are supported.
+These dashboard calculations do not change inference routing or consume resets.
+
+Both Events pages request server-built, filtered parent groups and request
+summaries. Lifecycle events load in chronological order when a request expands
+and are cached until the next page refresh. Filters apply to matching requests
+inside a parent group, and pagination counts parent groups. Shared regression
+tests cover these behaviors in both backends. Both expose paginated, searchable
+`GET /api/v1/requests` archive listings; archive availability includes captures
+with a response body even when the request body is absent.
+
+The shared frontend analytics and card regression tests run with
+`cd frontend && node --test tests/*.test.mjs`. CI and `make verify` run the frontend regression tests in both repositories.
+Backend suites run with
+`cd backend && uv run pytest -q`. Provider-specific protocol, authentication,
+models, thinking modes, caching, installers, and reset-credit features retain
+provider-appropriate implementations and tests; OpenAI-only settings are not
+exposed as unsupported Claude options.
+
 ## Quick start
 
 The supported installation path is agent-assisted: copy the complete prompt in

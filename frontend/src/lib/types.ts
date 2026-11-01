@@ -461,7 +461,6 @@ export interface DashboardAnalytics {
     overview: OverviewStats;
     activity: ActivityResponse;
     hourly: HourlyResponse;
-    distributions: DistributionResponse | null;
     model_mix: ModelMixResponse | null;
     thinking_level_mix: ThinkingLevelMixResponse | null;
     lookups: { users: UserLookup[]; models: string[] };

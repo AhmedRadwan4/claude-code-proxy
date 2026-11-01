@@ -16,11 +16,9 @@ import { Cpu } from "lucide-react";
 import { api } from "@/lib/api";
 import {
     ActivityResponse,
-    DistributionResponse,
     HourlyResponse,
     ModelMixResponse,
     OverviewStats,
-    PercentileBreakdown,
     TimeRange,
     ThinkingLevelMixResponse,
     UsagePage,
@@ -29,7 +27,6 @@ import {
 } from "@/lib/types";
 import {
     formatCostUsd,
-    formatCountdown,
     formatDateTime,
     formatNumber,
     formatTokens,
@@ -52,6 +49,7 @@ import {
     StackedBarChart,
     StackSeries,
 } from "@/components/Charts";
+import { UsageLimitsCard } from "@/components/UsageLimitsCard";
 import { RequestAnalyticsCard } from "@/components/RequestAnalyticsCard";
 import { RangePicker } from "@/components/RangePicker";
 import { UserFilter } from "@/components/UserFilter";
@@ -104,7 +102,6 @@ export default function OverviewPage() {
     const [stats, setStats] = useState<OverviewStats | null>(null);
     const [activity, setActivity] = useState<ActivityResponse | null>(null);
     const [hourly, setHourly] = useState<HourlyResponse | null>(null);
-    const [distro, setDistro] = useState<DistributionResponse | null>(null);
     const [modelMix, setModelMix] = useState<ModelMixResponse | null>(null);
     const [thinkingLevelMix, setThinkingLevelMix] = useState<ThinkingLevelMixResponse | null>(null);
     const [analyticsError, setAnalyticsError] = useState<string | null>(null);
@@ -150,7 +147,6 @@ export default function OverviewPage() {
         const requestId = ++analyticsRequestId.current;
         setAnalyticsLoading(true);
         setAnalyticsError(null);
-        setDistro(null);
         setModelMix(null);
         setThinkingLevelMix(null);
         const u = uid ?? undefined;
@@ -160,7 +156,6 @@ export default function OverviewPage() {
             setStats(data.overview);
             setActivity(data.activity);
             setHourly(data.hourly);
-            setDistro(data.distributions);
             setModelMix(data.model_mix);
             setThinkingLevelMix(data.thinking_level_mix);
             setAllUsers(data.lookups.users);
@@ -530,9 +525,7 @@ export default function OverviewPage() {
                         </div>
                     </Card>
 
-                    <SystemTokenFlow stats={stats} />
-
-                    <QuotaAverages stats={stats} />
+                    <UsageLimitsCard stats={stats} />
 
                     {modelMix && modelMix.users.some((user) => user.total_requests > 0) ? (
                         <UserInsightsCard modelData={modelMix} thinkingData={thinkingLevelMix} />
@@ -547,25 +540,6 @@ export default function OverviewPage() {
                             series={hourlyStackSeries}
                             timezone={tz}
                         />
-                    ) : null}
-
-                    {/* Independent columns avoid stretching short cards to match data-heavy neighbours. */}
-                    {stats.requests > 0 ? (
-                        <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-2">
-                            <div className="min-w-0 space-y-4">
-                                {modelMix &&
-                                modelMix.users.some((user) => user.total_requests > 0) ? (
-                                    <>
-                                        <RequestsByModelCard data={modelMix} />
-                                    </>
-                                ) : null}
-                            </div>
-                            <div className="min-w-0 space-y-4">
-                                {distro && distro.total_requests > 0 ? (
-                                    <DistributionCard distro={distro} />
-                                ) : null}
-                            </div>
-                        </div>
                     ) : null}
                 </>
             ) : null}
@@ -748,155 +722,6 @@ export default function OverviewPage() {
                         : null}
                 </section>
             ) : null}
-        </div>
-    );
-}
-
-function SystemTokenFlow({ stats }: { stats: OverviewStats }) {
-    const inputRate = Math.max(0, Math.min(100, stats.input_rate_pct));
-    const outputRate = Math.max(0, Math.min(100, stats.output_rate_pct));
-    const cacheHitRate = Math.max(0, Math.min(100, stats.cache_hit_rate_pct));
-
-    return (
-        <Card className="grid grid-cols-1 overflow-hidden md:grid-cols-2">
-            <div className="p-5 sm:p-6">
-                <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-fog-100 text-sm font-semibold">Input vs output rate</h3>
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-4">
-                    <div>
-                        <div className="text-fog-100 font-mono text-4xl font-semibold tabular-nums">
-                            {inputRate.toFixed(2)}%
-                        </div>
-                        <div className="text-fog-400 mt-1 text-xs">of traffic is input</div>
-                    </div>
-                    <div>
-                        <div className="text-fog-100 font-mono text-4xl font-semibold tabular-nums">
-                            {outputRate.toFixed(2)}%
-                        </div>
-                        <div className="text-fog-400 mt-1 text-xs">of traffic is output</div>
-                    </div>
-                </div>
-                <div
-                    className="bg-ink-700 mt-5 flex h-2 overflow-hidden rounded-full"
-                    role="img"
-                    aria-label={`${formatTokens(stats.input_tokens)} input tokens and ${formatTokens(stats.output_tokens)} output tokens`}
-                >
-                    <span
-                        className="h-full bg-[var(--color-chart-1)] transition-[width] duration-500"
-                        style={{ width: `${inputRate}%` }}
-                    />
-                    <span
-                        className="h-full bg-[var(--color-chart-2)] transition-[width] duration-500"
-                        style={{ width: `${outputRate}%` }}
-                    />
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-3 font-mono text-xs tabular-nums">
-                    <span className="text-fog-300">
-                        <i className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[var(--color-chart-1)]" />
-                        {formatTokens(stats.input_tokens)} input
-                    </span>
-                    <span className="text-fog-300 text-right">
-                        <i className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[var(--color-chart-2)]" />
-                        {formatTokens(stats.output_tokens)} output
-                    </span>
-                </div>
-            </div>
-
-            <div className="border-ink-700 border-t p-5 sm:p-6 md:border-t-0 md:border-l">
-                <h3 className="text-fog-100 text-sm font-semibold">
-                    Input cache hit rate
-                </h3>
-                <div className="mt-4 flex items-baseline justify-between gap-4">
-                    <div className="text-fog-100 font-mono text-4xl font-semibold tabular-nums">
-                        {cacheHitRate.toFixed(1)}%
-                    </div>
-                    <div className="text-fog-400 text-right text-xs">
-                        {formatTokens(stats.cached_input_tokens)} cached of{" "}
-                        {formatTokens(stats.input_tokens)} input tokens
-                    </div>
-                </div>
-                <div
-                    className="bg-ink-700 mt-5 h-2 overflow-hidden rounded-full"
-                    role="progressbar"
-                    aria-label="Input cache hit rate"
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={Math.round(cacheHitRate)}
-                >
-                    <div
-                        className="bg-brand-500 h-full rounded-full transition-[width] duration-500"
-                        style={{ width: `${cacheHitRate}%` }}
-                    />
-                </div>
-            </div>
-        </Card>
-    );
-}
-
-function QuotaAverages({ stats }: { stats: OverviewStats }) {
-    const accountLabel = `${formatNumber(stats.active_accounts)} / ${formatNumber(stats.total_accounts)} accounts`;
-    return (
-        <Card className="grid grid-cols-1 overflow-hidden md:grid-cols-2">
-            <QuotaAverageCell
-                label="Average 5-hour limit"
-                usedPct={stats.five_hour_average_pct}
-                resetAt={stats.five_hour_reset_at}
-                accountLabel={accountLabel}
-            />
-            <QuotaAverageCell
-                label="Average weekly limit"
-                usedPct={stats.weekly_average_pct}
-                resetAt={stats.weekly_reset_at}
-                accountLabel={accountLabel}
-                divided
-            />
-        </Card>
-    );
-}
-
-function QuotaAverageCell({
-    label,
-    usedPct,
-    resetAt,
-    accountLabel,
-    divided = false,
-}: {
-    label: string;
-    usedPct: number;
-    resetAt: string | null;
-    accountLabel: string;
-    divided?: boolean;
-}) {
-    const percentage = Math.max(0, Math.min(100, usedPct));
-    return (
-        <div
-            className={`p-5 sm:p-6 ${divided ? "border-ink-700 border-t md:border-t-0 md:border-l" : ""}`}
-        >
-            <h3 className="text-fog-100 text-sm font-semibold">{label}</h3>
-            <div className="text-fog-100 mt-4 font-mono text-4xl font-semibold tabular-nums">
-                {percentage.toFixed(1)}%
-            </div>
-            <div className="text-fog-400 mt-1 text-xs">average used</div>
-            <div className="text-fog-400 mt-2 text-xs">
-                {resetAt ? formatCountdown(resetAt) : "reset time unavailable"}
-            </div>
-            <div
-                className="bg-ink-700 mt-5 h-2 overflow-hidden rounded-full"
-                role="progressbar"
-                aria-label={`${label} average used`}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={percentage}
-            >
-                <div
-                    className="bg-brand-500 h-full rounded-full transition-[width] duration-500"
-                    style={{ width: `${percentage}%` }}
-                />
-            </div>
-            <div className="text-fog-400 mt-2 text-xs">
-                {accountLabel} authenticated and enabled
-            </div>
         </div>
     );
 }
@@ -1225,54 +1050,9 @@ function SegmentBar({
     );
 }
 
-function RequestsByModelCard({ data }: { data: ModelMixResponse }) {
-    const byModel: Record<string, { requests: number }> = {};
-    for (const u of data.users) {
-        for (const m of u.models) {
-            byModel[m.model] = byModel[m.model] || { requests: 0 };
-            byModel[m.model].requests += m.requests;
-        }
-    }
-    const sorted = Object.entries(byModel).sort((a, b) => b[1].requests - a[1].requests);
-    const maxReq = sorted[0]?.[1].requests ?? 1;
-    const totalReq = sorted.reduce((s, [, v]) => s + v.requests, 0);
-    const allModels = Array.from(new Set(data.users.flatMap((u) => u.models.map((m) => m.model))));
-
-    return (
-        <Card className="p-5">
-            <h3 className="text-fog-100 text-sm font-semibold">Requests by model</h3>
-            <p className="text-fog-400 mt-0.5 mb-4 text-xs">Request volume by model</p>
-            <div className="space-y-2.5">
-                {sorted.map(([model, v]) => {
-                    const pct = Math.round((v.requests / totalReq) * 100);
-                    const ci = allModels.indexOf(model);
-                    return (
-                        <div key={model} className="flex items-center gap-2.5">
-                            <span className="text-fog-200 w-28 shrink-0 truncate font-mono text-xs">
-                                {shortModel(model)}
-                            </span>
-                            <div className="bg-ink-800 h-5 flex-1 overflow-hidden rounded">
-                                <div
-                                    className="h-full rounded"
-                                    style={{
-                                        width: `${Math.max((v.requests / maxReq) * 100, 2)}%`,
-                                        backgroundColor: modelColor(ci),
-                                        opacity: 0.85,
-                                    }}
-                                />
-                            </div>
-                            <span className="text-fog-200 w-16 text-right font-mono text-xs tabular-nums">
-                                {formatNumber(v.requests)}
-                            </span>
-                            <span className="text-fog-400 w-8 text-right font-mono text-[11px] tabular-nums">
-                                {pct}%
-                            </span>
-                        </div>
-                    );
-                })}
-            </div>
-        </Card>
-    );
+function CacheTtlCell({ ttl }: { ttl: "1h" | "5m" | null }) {
+    if (!ttl) return <span className="text-fog-500">·</span>;
+    return <Badge tone={ttl === "1h" ? "brand" : "neutral"}>{ttl}</Badge>;
 }
 
 const THINKING_LEVEL_ORDER = [
@@ -1305,11 +1085,6 @@ function orderedThinkingLevels(data: ThinkingLevelMixResponse): string[] {
     });
 }
 
-function CacheTtlCell({ ttl }: { ttl: "1h" | "5m" | null }) {
-    if (!ttl) return <span className="text-fog-500">·</span>;
-    return <Badge tone={ttl === "1h" ? "brand" : "neutral"}>{ttl}</Badge>;
-}
-
 function CostCell({ value }: { value: number }) {
     if (!value || value <= 0) return <span className="text-fog-400">—</span>;
     return <span className="text-fog-400 text-xs">{formatCostUsd(value)}</span>;
@@ -1336,69 +1111,4 @@ function StatusBadge({ code }: { code: number | null }) {
                 ? "warn"
                 : "bad";
     return <Badge tone={tone}>{code ?? "—"}</Badge>;
-}
-
-const PERCENTILE_LABELS = ["Min", "P25", "P50", "P75", "P90", "P95", "Max"] as const;
-const PERCENTILE_KEYS: (keyof PercentileBreakdown)[] = [
-    "min",
-    "p25",
-    "p50",
-    "p75",
-    "p90",
-    "p95",
-    "max",
-];
-
-function DistributionCard({ distro }: { distro: DistributionResponse }) {
-    function bars(breakdown: PercentileBreakdown, tone: "coral" | "amber") {
-        const color = tone === "coral" ? "var(--color-chart-1)" : "var(--color-chart-2)";
-        const localMax = Math.max(breakdown.max, 1);
-        return (
-            <div className="space-y-2">
-                {PERCENTILE_KEYS.map((key, i) => {
-                    const val = breakdown[key];
-                    const pct = (val / localMax) * 100;
-                    return (
-                        <div key={key} className="flex items-center gap-3">
-                            <span className="text-fog-400 w-8 text-right font-mono text-[11px]">
-                                {PERCENTILE_LABELS[i]}
-                            </span>
-                            <div className="bg-ink-900 relative h-5 flex-1 overflow-hidden rounded">
-                                <div
-                                    className="h-full rounded transition-all duration-300"
-                                    style={{
-                                        width: `${Math.max(pct, 0.5)}%`,
-                                        backgroundColor: color,
-                                    }}
-                                />
-                            </div>
-                            <span className="text-fog-200 w-20 text-right font-mono text-xs tabular-nums">
-                                {formatTokens(val)}
-                            </span>
-                        </div>
-                    );
-                })}
-            </div>
-        );
-    }
-
-    return (
-        <Card className="p-5">
-            <div className="flex items-baseline justify-between">
-                <h3 className="text-fog-100 text-sm font-semibold">
-                    Per-request token distribution
-                </h3>
-            </div>
-            <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <div>
-                    <h4 className="text-fog-200 mb-3 text-xs font-semibold">Input tokens</h4>
-                    {bars(distro.input_tokens, "coral")}
-                </div>
-                <div>
-                    <h4 className="text-fog-200 mb-3 text-xs font-semibold">Output tokens</h4>
-                    {bars(distro.output_tokens, "amber")}
-                </div>
-            </div>
-        </Card>
-    );
 }
