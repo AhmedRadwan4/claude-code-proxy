@@ -28,8 +28,8 @@ jobs:
       - name: Test, package and launch exact DMG app
         env:
           APP_VERSION: ${{ steps.version.outputs.version }}
-          APP_ARTIFACTS_claude-menu-bar: ${{ github.workspace }}/artifacts
-          APP_SNAPSHOT_claude-menu-bar: ${{ github.workspace }}/artifacts
+          APP_ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
+          APP_SNAPSHOT_DIR: ${{ github.workspace }}/artifacts
         run: clients/claude-menu-bar/scripts/package-macos.sh
       - uses: actions/upload-artifact@v4
         if: always()

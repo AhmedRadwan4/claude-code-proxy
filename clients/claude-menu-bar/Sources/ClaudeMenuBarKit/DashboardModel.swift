@@ -99,7 +99,7 @@ public final class DashboardModel: ObservableObject {
             try? credentials.write(nil, key: "token"); try? credentials.write(nil, key: "password")
             overview = nil; lastUpdated = nil; isConfigured = false; showingSettings = true
             settingsError = "Session expired. Sign in again."
-        } catch { error = error.localizedDescription }
+        } catch { self.error = error.localizedDescription }
     }
     func signOut() {
         do { try credentials.write(nil, key: "token"); try credentials.write(nil, key: "password") }
