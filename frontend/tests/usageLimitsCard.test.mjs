@@ -67,10 +67,22 @@ test("missing or expired reset timestamps have honest fallback text", () => {
 });
 
 test("shows banked reset totals only when the provider supports them", () => {
-    assert.match(text(render({ total_reset_credits_available: 13 })), /Available limit resets: 13/);
-    assert.match(text(render({ total_reset_credits_available: 0 })), /Available limit resets: 0/);
+    assert.match(text(render({ total_reset_credits_available: 13 })), /Available limit resets13/);
+    assert.match(text(render({ total_reset_credits_available: 0 })), /Available limit resets0/);
     assert.doesNotMatch(
         text(render({ total_reset_credits_available: null })),
         /Available limit resets/,
     );
+});
+
+test("reset credits are the fifth metric, a count, and never repeated in the footer", () => {
+    const html = render({ total_reset_credits_available: 345 });
+    const labels = [...html.matchAll(/<dt[^>]*>(.*?)<\/dt>/g)].map((match) => match[1]);
+    assert.equal(labels.length, 5);
+    assert.equal(labels[4], "Available limit resets");
+    const values = [...html.matchAll(/<dd[^>]*>(.*?)<\/dd>/g)].map((match) => text(match[1]));
+    assert.equal(values.at(-1), "345");
+    assert.equal((html.match(/Available limit resets/g) ?? []).length, 1);
+    const unsupported = render({ total_reset_credits_available: null });
+    assert.equal([...unsupported.matchAll(/<dt[^>]*>/g)].length, 4);
 });

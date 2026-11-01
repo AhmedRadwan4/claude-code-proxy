@@ -38,7 +38,7 @@ The standalone Requests by model and Per-request token distribution cards are
 removed; requests by model over time remains available in Request analytics.
 The dashboard bundle no longer computes the removed distribution panel.
 There are no progress bars, pills, remaining percentages, or token-total captions
-in this card. Four columns become a two-by-two layout when the card is narrow.
+in this card. The four percentage metrics use a two-by-two layout when the card is narrow.
 
 Weekly-exhausted accounts contribute 100% used to the five-hour average; they
 are not removed from its denominator. Reset countdowns show the earliest future
@@ -50,9 +50,10 @@ These dashboard calculations do not change inference routing or consume resets.
 Fresh successful quota probes also release an old quota cooldown when the
 recorded quota-failure deadline matches and every observed window is usable.
 Short backoffs, unrelated transient failures, missing probe data, and real quota
-exhaustion do not clear a cooldown. The Usage & limits footer reports the total
-banked limit-reset credits for enabled authenticated accounts when the provider
+exhaustion do not clear a cooldown. The Usage & limits card reports the total
+banked limit-reset credits for enabled authenticated accounts as a fifth metric column when the provider
 supports them (Codex); unsupported providers do not display a fictitious zero.
+Narrow cards use two columns with the reset count on a full-width final row.
 
 Both Events pages request server-built, filtered parent groups and request
 summaries. Lifecycle events load in chronological order when a request expands
