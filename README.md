@@ -27,6 +27,11 @@ database record is used.
 
 The full-width **Request analytics** panel defaults to TPS and also includes requests by model and requests by user over time. Every view follows the selected date range, user, and model filters. Ranges up to two days use hourly buckets; longer ranges use daily buckets. Missing TPS measurements appear as gaps. Users contributing less than 5% of requests across the selected range are combined into one Others series in Requests by user. Model dropdowns list only models with activity in the selected range and user scope. **User analytics** opens with Models as its first tab, and **Peak requests** uses the full dashboard width. The dashboard no longer includes the Top users ranking.
 
+Request analytics uses full bucket timestamps and stable per-series identifiers.
+Localized hour labels are display-only, so repeated hours across days cannot
+select a different tooltip bucket. Tooltip rows read the same series values as
+the plotted lines, including zero counts, TPS gaps, and hidden-series choices.
+
 The home page fetches analytics through one read-only `/api/v1/stats/dashboard` response. Independent calculations use a bounded worker pool with separate database sessions; the hidden legacy usage table no longer fetches data. Events combine lookup lists in one request and count paginated parent groups in the grouped selection query. These changes do not alter inference or account routing.
 
 ## Shared dashboard behavior
