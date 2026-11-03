@@ -502,3 +502,18 @@ resort after model-compatible account capacity is exhausted.
 Presets include **Allow API fallback providers**. Users inherit this setting unless they select a per-user fallback override. Clearing the override restores preset inheritance. The migration preserves existing user fallback permissions.
 
 Request metrics are finalized when provider usage arrives. Interrupted or incomplete responses without usage are shown as **Unavailable**, rather than zero-token, zero-cost successes. HTTP 200 alone does not mean generation finished; historical captures without final usage cannot supply exact token counts or TPS.
+
+## Unified capacity alerts
+
+**Request capacity exhausted** replaces Entire account pool unavailable and
+503 capacity exhaustion. An exhausted HTTP 503 request queues one alert type,
+including model-specific failures, with the model, failure reason, pool counts,
+next useful capacity reset, and a rolling 60-second failure/user summary.
+
+Deployment automatically merges old database rules per channel: enabled when
+either old rule was enabled; the longest enabled-rule cooldown wins; customized
+old templates are preserved together using the supported legacy variables.
+Existing merged-rule settings are never overwritten on subsequent migrations.
+Legacy queued/retrying duplicates are suppressed; sent history stays intact and
+still contributes to the shared notification cooldown. No migration sends a
+notification. A zero cooldown allows one alert per exhausted request.
