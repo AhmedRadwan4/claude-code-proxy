@@ -27,6 +27,11 @@ database record is used.
 
 The full-width **Request analytics** panel defaults to TPS and also includes requests by model and requests by user over time. Every view follows the selected date range, user, and model filters. Ranges up to two days use hourly buckets; longer ranges use daily buckets. Missing TPS measurements appear as gaps. Users contributing less than 5% of requests across the selected range are combined into one Others series in Requests by user. Model dropdowns list only models with activity in the selected range and user scope. **User analytics** opens with Models as its first tab, and **Peak requests** uses the full dashboard width. The dashboard no longer includes the Top users ranking.
 
+Request analytics uses full bucket timestamps and stable per-series identifiers.
+Localized hour labels are display-only, so repeated hours across days cannot
+select a different tooltip bucket. Tooltip rows read the same series values as
+the plotted lines, including zero counts, TPS gaps, and hidden-series choices.
+
 The home page fetches analytics through one read-only `/api/v1/stats/dashboard` response. Independent calculations use a bounded worker pool with separate database sessions; the hidden legacy usage table no longer fetches data. Events combine lookup lists in one request and count paginated parent groups in the grouped selection query. These changes do not alter inference or account routing.
 
 ## Shared dashboard behavior
@@ -497,3 +502,18 @@ resort after model-compatible account capacity is exhausted.
 Presets include **Allow API fallback providers**. Users inherit this setting unless they select a per-user fallback override. Clearing the override restores preset inheritance. The migration preserves existing user fallback permissions.
 
 Request metrics are finalized when provider usage arrives. Interrupted or incomplete responses without usage are shown as **Unavailable**, rather than zero-token, zero-cost successes. HTTP 200 alone does not mean generation finished; historical captures without final usage cannot supply exact token counts or TPS.
+
+## Unified capacity alerts
+
+**Request capacity exhausted** replaces Entire account pool unavailable and
+503 capacity exhaustion. An exhausted HTTP 503 request queues one alert type,
+including model-specific failures, with the model, failure reason, pool counts,
+next useful capacity reset, and a rolling 60-second failure/user summary.
+
+Deployment automatically merges old database rules per channel: enabled when
+either old rule was enabled; the longest enabled-rule cooldown wins; customized
+old templates are preserved together using the supported legacy variables.
+Existing merged-rule settings are never overwritten on subsequent migrations.
+Legacy queued/retrying duplicates are suppressed; sent history stays intact and
+still contributes to the shared notification cooldown. No migration sends a
+notification. A zero cooldown allows one alert per exhausted request.
