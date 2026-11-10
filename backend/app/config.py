@@ -128,6 +128,7 @@ class Settings(BaseSettings):
     ARCHIVE_RETENTION_BATCH_BYTES: int = 536870912
     ARCHIVE_RETENTION_MIN_FREE_GIB: int = 10
     ARCHIVE_RETENTION_DELETE_MINIO: bool = False
+    ARCHIVE_COLD_RETENTION_DAYS: int = 0
 
     # Deployment Configuration -- full domain the proxy is served on; the dashboard is at https://{DOMAIN}/ and the
     # backend at https://{DOMAIN}/api.

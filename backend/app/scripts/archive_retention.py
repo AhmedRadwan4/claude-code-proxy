@@ -12,6 +12,11 @@ from pathlib import Path
 import boto3
 from botocore.config import Config
 
+# 16 KiB average chunks: each request re-sends the conversation, so small chunks dedupe it.
+# Measured on one prod day: 2.45 GB -> 33 MB (default chunker: 1.09 GB). Changing this later
+# stops new archives deduping against old ones.
+CHUNKER = "buzhash,10,23,14,4095"
+
 
 def cycle() -> None:
     s3 = boto3.client(
@@ -31,11 +36,16 @@ def cycle() -> None:
     floor = int(os.environ.get("ARCHIVE_RETENTION_MIN_FREE_GIB", "10")) * 1024**3
     limit = int(os.environ.get("ARCHIVE_RETENTION_BATCH_BYTES", str(512 * 1024 * 1024)))
     cutoff = datetime.now(timezone.utc) - timedelta(days=int(os.environ.get("ARCHIVE_HOT_RETENTION_DAYS", "4")))
+    if not (repo / "config").exists():
+        subprocess.run(["borg", "init", "--encryption=none", str(repo)], check=True)
+    cold_days = int(os.environ.get("ARCHIVE_COLD_RETENTION_DAYS", "0"))
+    if cold_days > 0:
+        # Archive time is archiving time, so events live about hot + cold days in total.
+        subprocess.run(["borg", "prune", "--keep-within", f"{cold_days}d", "--glob-archives", "raw-*", str(repo)], check=True)
+        subprocess.run(["borg", "compact", str(repo)], check=True)
     if shutil.disk_usage(work).free < floor:
         print("retention paused: disk floor", flush=True)
         return
-    if not (repo / "config").exists():
-        subprocess.run(["borg", "init", "--encryption=none", str(repo)], check=True)
     root = work / "batch"
     shutil.rmtree(root, ignore_errors=True)
     root.mkdir()
@@ -48,7 +58,7 @@ def cycle() -> None:
         if not batch:
             return
         name = f"raw-{datetime.now(timezone.utc):%Y%m%dT%H%M%S}-{seq:06d}"
-        subprocess.run(["borg", "create", "--compression", "zstd,3", "--stats", f"{repo}::{name}", str(root)], check=True)
+        subprocess.run(["borg", "create", "--compression", "zstd,3", "--chunker-params", CHUNKER, "--stats", f"{repo}::{name}", str(root)], check=True)
         subprocess.run(["borg", "list", f"{repo}::{name}"], check=True, stdout=subprocess.DEVNULL)
         if os.environ.get("ARCHIVE_RETENTION_DELETE_MINIO", "false").lower() == "true":
             for key in batch:
